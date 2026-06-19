@@ -1,5 +1,9 @@
 #pragma once
 
+#ifdef _WIN32
+#include "ToneLibrary.h"
+#endif
+
 #include "../AudioDSPTools/dsp/ImpulseResponse.h"
 #include "../AudioDSPTools/dsp/NoiseGate.h"
 #include "../AudioDSPTools/dsp/dsp.h"
@@ -99,6 +103,10 @@ enum ECtrlTags
   kCtrlTagTunerFreq,    // frequency readout label
   kCtrlTagTunerNote,    // note name label
   kCtrlTagTunerCents,   // cents label
+  kCtrlTagAmpModelName,        // large model name label on AMP page
+  kCtrlTagTone3000Browser,     // Tone3000 model browser overlay
+  kCtrlTagInputLevelDisplay,   // "IN: xdB" status bar label
+  kCtrlTagOutputLevelDisplay,  // "OUT: xdB" status bar label
   kNumCtrlTags
 };
 
@@ -320,6 +328,19 @@ private:
   dsp::Tuner mTuner;
   // Throttle tuner UI updates to ~30fps
   int mTunerUpdateCounter = 0;
+
+  // Tone3000 library client
+#ifdef _WIN32
+  ToneLibrary mToneLib;
+#endif
+
+  // Local model navigation (Windows: Documents\AmpForge\*.nam)
+#ifdef _WIN32
+  std::vector<std::string> mModelFiles;
+  int                      mCurrentModelIdx = -1;
+  void _ScanModelFiles();
+  void _NavigateModel(int delta);
+#endif
 
   // File paths
   WDL_String mNAMPath;

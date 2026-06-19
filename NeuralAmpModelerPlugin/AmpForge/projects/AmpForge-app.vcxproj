@@ -421,12 +421,19 @@
     <ClCompile Include="..\..\NeuralAmpModelerCore\NAM\wavenet\a2_fast.cpp" />
     <ClCompile Include="..\..\NeuralAmpModelerCore\NAM\wavenet\slimmable.cpp" />
     <ClCompile Include="..\ToneStack.cpp" />
+    <ClCompile Include="..\ToneLibrary.cpp" />
   </ItemGroup>
   <ItemGroup>
     <ResourceCompile Include="..\resources\main.rc" />
   </ItemGroup>
   <ItemGroup>
     <Image Include="..\resources\AmpForge.ico" />
+    <None Include="..\resources\img\AmpHead.png" />
+    <None Include="..\resources\img\KnobFace.png" />
+    <None Include="..\resources\fonts\Inter_24pt-Regular.ttf" />
+    <None Include="..\resources\fonts\Inter_24pt-Bold.ttf" />
+    <None Include="..\resources\fonts\Inter_24pt-ExtraBold.ttf" />
+    <None Include="..\resources\fonts\BarlowSemiCondensed-Black.ttf" />
   </ItemGroup>
   <ItemGroup>
     <None Include="..\config\AmpForge-ios.xcconfig" />

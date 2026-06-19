@@ -27,9 +27,9 @@
 #define PLUG_DOES_MPE 0
 #define PLUG_DOES_STATE_CHUNKS 1
 #define PLUG_HAS_UI 1
-// AmpForge layout: wider for 5-page nav + amp head panel
-#define PLUG_WIDTH 900
-#define PLUG_HEIGHT 580
+// AmpForge layout: Figma-designed 1280x800 widescreen
+#define PLUG_WIDTH 1280
+#define PLUG_HEIGHT 800
 #define PLUG_FPS 60
 #define PLUG_SHARED_RESOURCES 0
 #define PLUG_HOST_RESIZE 0
@@ -59,6 +59,10 @@
 
 #define ROBOTO_FN "Roboto-Regular.ttf"
 #define MICHROMA_FN "Michroma-Regular.ttf"
+#define INTER_REGULAR_FN "Inter_24pt-Regular.ttf"
+#define INTER_BOLD_FN "Inter_24pt-Bold.ttf"
+#define INTER_EXTRABOLD_FN "Inter_24pt-ExtraBold.ttf"
+#define BARLOW_BLACK_FN "BarlowSemiCondensed-Black.ttf"
 
 #define GEAR_FN "Gear.svg"
 #define FILE_FN "File.svg"
@@ -93,6 +97,9 @@
 #define METERBACKGROUND_FN "MeterBackground.png"
 #define METERBACKGROUND2X_FN "MeterBackground@2x.png"
 #define METERBACKGROUND3X_FN "MeterBackground@3x.png"
+
+#define AMPHEAD_FN "AmpHead.png"
+#define KNOBFACE_FN "KnobFace.png"
 
 // Issue 291
 // On the macOS standalone, we might not have permissions to traverse the file directory, so we have the app ask the

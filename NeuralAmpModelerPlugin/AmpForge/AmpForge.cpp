@@ -16,47 +16,59 @@
 #include "architecture.hpp"
 
 #include "AmpForgeControls.h"
+#include "AmpParamBox.h"
+#include "AmpUIControls.h"
+#ifdef _WIN32
+#include <shlobj.h>
+#include "ToneLibrary.h"
+#include "Tone3000Browser.h"
+#endif
 
 using namespace iplug;
 using namespace igraphics;
 
 const double kDCBlockerFrequency = 5.0;
 
-// Styles
+// Hotone Ampero Mini dark/amber theme
 const IVColorSpec colorSpec{
-  DEFAULT_BGCOLOR, // Background
-  PluginColors::NAM_THEMECOLOR, // Foreground
-  PluginColors::NAM_THEMECOLOR.WithOpacity(0.3f), // Pressed
-  PluginColors::NAM_THEMECOLOR.WithOpacity(0.4f), // Frame
-  PluginColors::MOUSEOVER, // Highlight
-  DEFAULT_SHCOLOR, // Shadow
-  PluginColors::NAM_THEMECOLOR, // Extra 1
-  COLOR_RED, // Extra 2 --> color for clipping in meters
-  PluginColors::NAM_THEMECOLOR.WithContrast(0.1f), // Extra 3
+  PluginColors::HOTONE_BG,                        // Background
+  PluginColors::HOTONE_AMBER,                     // Foreground (knob tracks)
+  PluginColors::HOTONE_DIM,                       // Pressed
+  PluginColors::HOTONE_BORDER,                    // Frame
+  PluginColors::HOTONE_AMBER.WithOpacity(0.45f),  // Highlight
+  IColor(255, 0, 0, 0),                           // Shadow
+  PluginColors::HOTONE_AMBER,                     // Extra1
+  COLOR_RED,                                      // Extra2 (clip)
+  PluginColors::HOTONE_DIM,                       // Extra3
 };
 
-const IVStyle style =
-  IVStyle{true, // Show label
-          true, // Show value
-          colorSpec,
-          {DEFAULT_TEXT_SIZE + 3.f, EVAlign::Middle, PluginColors::NAM_THEMEFONTCOLOR}, // Knob label text5
-          {DEFAULT_TEXT_SIZE + 3.f, EVAlign::Bottom, PluginColors::NAM_THEMEFONTCOLOR}, // Knob value text
-          DEFAULT_HIDE_CURSOR,
-          DEFAULT_DRAW_FRAME,
-          false,
-          DEFAULT_EMBOSS,
-          0.2f,
-          2.f,
-          DEFAULT_SHADOW_OFFSET,
-          DEFAULT_WIDGET_FRAC,
-          DEFAULT_WIDGET_ANGLE};
-const IVStyle titleStyle =
-  DEFAULT_STYLE.WithValueText(IText(30, COLOR_WHITE, "Michroma-Regular")).WithDrawFrame(false).WithShadowOffset(2.f);
-const IVStyle radioButtonStyle =
-  style
-    .WithColor(EVColor::kON, PluginColors::NAM_THEMECOLOR) // Pressed buttons and their labels
-    .WithColor(EVColor::kOFF, PluginColors::NAM_THEMECOLOR.WithOpacity(0.1f)) // Unpressed buttons
-    .WithColor(EVColor::kX1, PluginColors::NAM_THEMECOLOR.WithOpacity(0.6f)); // Unpressed buttons' labels
+const IVStyle style = IVStyle{
+  true,  // Show label
+  true,  // Show value
+  colorSpec,
+  IText(13.f, PluginColors::HOTONE_GREY,  "Inter-Regular"),  // label text
+  IText(13.f, PluginColors::HOTONE_AMBER, "Inter-Regular"),  // value text
+  DEFAULT_HIDE_CURSOR,
+  true,  // draw frame
+  false,
+  DEFAULT_EMBOSS,
+  0.3f,  // roundness
+  1.5f,  // frame thickness
+  DEFAULT_SHADOW_OFFSET,
+  DEFAULT_WIDGET_FRAC,
+  DEFAULT_WIDGET_ANGLE
+};
+
+const IVStyle titleStyle = DEFAULT_STYLE
+  .WithColor(EVColor::kBG, PluginColors::HOTONE_BG)
+  .WithValueText(IText(26.f, COLOR_WHITE, "Michroma-Regular"))
+  .WithDrawFrame(false)
+  .WithShadowOffset(1.f);
+
+const IVStyle radioButtonStyle = style
+  .WithColor(EVColor::kON,  PluginColors::HOTONE_AMBER)
+  .WithColor(EVColor::kOFF, PluginColors::HOTONE_BTN)
+  .WithColor(EVColor::kX1,  PluginColors::HOTONE_DIM);
 
 EMsgBoxResult _ShowMessageBox(iplug::igraphics::IGraphics* pGraphics, const char* str, const char* caption,
                               EMsgBoxType type)
@@ -80,6 +92,9 @@ AmpForge::AmpForge(const InstanceInfo& info)
 {
   _InitToneStack();
   nam::activations::Activation::enable_fast_tanh();
+#ifdef _WIN32
+  mToneLib.SetApiKey("7c917fc6-8327-4de4-b236-86fedf0548f5");
+#endif
   GetParam(kInputLevel)->InitGain("Input", 0.0, -20.0, 20.0, 0.1);
   GetParam(kToneBass)->InitDouble("Bass", 5.0, 0.0, 10.0, 0.1);
   GetParam(kToneMid)->InitDouble("Middle", 5.0, 0.0, 10.0, 0.1);
@@ -139,8 +154,12 @@ AmpForge::AmpForge(const InstanceInfo& info)
     pGraphics->EnableTooltips(true);
     pGraphics->EnableMultiTouch(true);
 
-    pGraphics->LoadFont("Roboto-Regular", ROBOTO_FN);
-    pGraphics->LoadFont("Michroma-Regular", MICHROMA_FN);
+    pGraphics->LoadFont("Roboto-Regular",            ROBOTO_FN);
+    pGraphics->LoadFont("Michroma-Regular",          MICHROMA_FN);
+    pGraphics->LoadFont("Inter-Regular",             INTER_REGULAR_FN);
+    pGraphics->LoadFont("Inter-Bold",                INTER_BOLD_FN);
+    pGraphics->LoadFont("Inter-ExtraBold",           INTER_EXTRABOLD_FN);
+    pGraphics->LoadFont("BarlowSemiCondensed-Black", BARLOW_BLACK_FN);
 
     // ---- Load assets ----
     const auto gearSVG        = pGraphics->LoadSVG(GEAR_FN);
@@ -159,94 +178,109 @@ AmpForge::AmpForge(const InstanceInfo& info)
     const auto knobBackgroundBitmap      = pGraphics->LoadBitmap(KNOBBACKGROUND_FN);
     const auto switchHandleBitmap        = pGraphics->LoadBitmap(SLIDESWITCHHANDLE_FN);
     const auto meterBackgroundBitmap     = pGraphics->LoadBitmap(METERBACKGROUND_FN);
+    // ampHeadBitmap / ampKnobBitmap removed — AMP page now uses vector Hotone-style UI
 
-    const auto b = pGraphics->GetBounds();
+    const auto b = pGraphics->GetBounds();  // 1280 x 800
 
-    // ---- Zone geometry (PLUG_WIDTH x PLUG_HEIGHT) ----
-    const float kTopBarH = 52.f;
-    const float kNavH    = 44.f;
-    const float kBotBarH = 40.f;
+    // ---- Zone geometry ----
+    const float kNavH      = 70.f;
+    const float kStatusH   = 50.f;
+    const float kBotStripH = 120.f;
 
-    const IRECT topBarRect  = b.GetFromTop(kTopBarH);
-    const IRECT navRect     = b.GetFromTop(kTopBarH + kNavH).GetFromBottom(kNavH);
-    const IRECT contentRect = b.GetReducedFromTop(kTopBarH + kNavH).GetReducedFromBottom(kBotBarH);
-    const IRECT botBarRect  = b.GetFromBottom(kBotBarH);
+    const IRECT navRect         = b.GetFromTop(kNavH);
+    const IRECT statusRect      = b.GetFromTop(kNavH + kStatusH).GetFromBottom(kStatusH);
+    const IRECT ampMainRect     = b.GetReducedFromTop(kNavH + kStatusH).GetReducedFromBottom(kBotStripH);
+    const IRECT botStripRect    = b.GetFromBottom(kBotStripH);
+    const IRECT fullContentRect = b.GetReducedFromTop(kNavH + kStatusH);
 
-    // ---- Background ----
-    pGraphics->AttachBackground(BACKGROUND_FN);
+    // ---- Global background ----
+    pGraphics->AttachControl(new IVPanelControl(b, "",
+      DEFAULT_STYLE
+        .WithColor(EVColor::kBG, PluginColors::HOTONE_BG)
+        .WithDrawFrame(false)));
 
-    // ---- TOP BAR ----
+    // ---- NAV BAR: custom-drawn single control ----
+    pGraphics->AttachControl(new NavBarControl(navRect,
+      [pGraphics](int tab) {
+        static const char* grps[] = {"PAGE_P1","PAGE_P2","PAGE_AMP","PAGE_IR","PAGE_EQ"};
+        for (int j = 0; j < 5; j++)
+          pGraphics->ForControlInGroup(grps[j], [j, tab](IControl* c) { c->Hide(j != tab); });
+        pGraphics->SetAllControlsDirty();
+      }));
+
+    // ---- STATUS ROW: IN | OUT | Change tone... | T3K | BPM ----
     {
-      // Plugin name
-      pGraphics->AttachControl(new IVLabelControl(
-        topBarRect.GetFromLeft(160.f).GetMidVPadded(14.f).GetHShifted(12.f),
-        "AMPFORGE", titleStyle));
+      // Dark BG strip
+      pGraphics->AttachControl(new IVPanelControl(statusRect, "",
+        DEFAULT_STYLE
+          .WithColor(EVColor::kBG, PluginColors::HOTONE_BG)
+          .WithDrawFrame(false)));
 
-      // Input meter
+      const float sT = statusRect.T + 6.f;
+      const float sB = statusRect.B - 6.f;
+
+      // IN level
       pGraphics->AttachControl(
-        new NAMMeterControl(topBarRect.GetFromLeft(18.f).GetHShifted(180.f).GetMidVPadded(22.f),
-                            meterBackgroundBitmap, style),
-        kCtrlTagInputMeter);
+        new StatusBoxControl(IRECT(8.f, sT, 134.f, sB), "IN: 0 dB"),
+        kCtrlTagInputLevelDisplay);
 
-      // Input Gain knob
-      pGraphics->AttachControl(new IVKnobControl(
-        topBarRect.GetFromLeft(50.f).GetHShifted(202.f).GetMidVPadded(22.f),
-        kInputLevel, "IN", style));
-
-      // Noise Gate toggle
-      pGraphics->AttachControl(new NAMSwitchControl(
-        topBarRect.GetFromLeft(48.f).GetHShifted(258.f).GetMidVPadded(14.f),
-        kNoiseGateActive, "GATE", style, switchHandleBitmap));
-
-      // Noise Gate Threshold knob
-      pGraphics->AttachControl(new IVKnobControl(
-        topBarRect.GetFromLeft(50.f).GetHShifted(310.f).GetMidVPadded(22.f),
-        kNoiseGateThreshold, "THR", style));
-
-      // Mono/Stereo toggle (centre-left)
-      pGraphics->AttachControl(new NAMSwitchControl(
-        topBarRect.GetMidHPadded(38.f).GetMidVPadded(14.f).GetHShifted(-50.f),
-        kInputModeStereo, "STEREO", style, switchHandleBitmap));
-
-      // Doubler toggle (centre-right)
-      pGraphics->AttachControl(new NAMSwitchControl(
-        topBarRect.GetMidHPadded(38.f).GetMidVPadded(14.f).GetHShifted(50.f),
-        kDoublerActive, "DBL", style, switchHandleBitmap));
-
-      // Output Gain knob
-      pGraphics->AttachControl(new IVKnobControl(
-        topBarRect.GetFromRight(50.f).GetHShifted(-60.f).GetMidVPadded(22.f),
-        kOutputLevel, "OUT", style));
-
-      // Output meter
+      // OUT level
       pGraphics->AttachControl(
-        new NAMMeterControl(topBarRect.GetFromRight(18.f).GetHShifted(-38.f).GetMidVPadded(22.f),
-                            meterBackgroundBitmap, style),
-        kCtrlTagOutputMeter);
+        new StatusBoxControl(IRECT(142.f, sT, 268.f, sB), "OUT: 0 dB"),
+        kCtrlTagOutputLevelDisplay);
+
+      // Change tone... (file picker)
+      pGraphics->AttachControl(new ChangeToneControl(
+        IRECT(276.f, sT, 1090.f, sB),
+        [this, pGraphics](IControl*) {
+          WDL_String file, dir;
+          pGraphics->PromptForFile(file, dir, EFileAction::Open, "nam",
+            [this, pGraphics](const WDL_String& f, const WDL_String&) {
+              if (f.GetLength())
+              {
+                const std::string msg = _StageModel(f);
+                if (!msg.empty())
+                {
+                  std::stringstream ss;
+                  ss << "Failed to load NAM model:\n\n" << msg;
+                  _ShowMessageBox(pGraphics, ss.str().c_str(), "Failed to load model!", kMB_OK);
+                }
+              }
+            });
+        }));
+
+      // Tone3000 browse button
+      pGraphics->AttachControl(new StatusBoxControl(
+        IRECT(1098.f, sT, 1148.f, sB), "...", true,
+        [pGraphics](IControl*) {
+#ifdef _WIN32
+          if (auto* br = pGraphics->GetControlWithTag(kCtrlTagTone3000Browser))
+            br->Hide(false);
+          pGraphics->SetAllControlsDirty();
+#endif
+        }));
+
+      // BPM
+      pGraphics->AttachControl(
+        new StatusBoxControl(IRECT(1156.f, sT, 1272.f, sB), "BPM: 120"));
+
+      // Hidden meter controls — needed for TransmitData
+      const IRECT offscreen = IRECT(-4.f, -4.f, -2.f, -2.f);
+      pGraphics->AttachControl(
+        new NAMMeterControl(offscreen, meterBackgroundBitmap, style),
+        kCtrlTagInputMeter)->Hide(true);
+      pGraphics->AttachControl(
+        new NAMMeterControl(offscreen, meterBackgroundBitmap, style),
+        kCtrlTagOutputMeter)->Hide(true);
     }
 
-    // ---- NAV BAR: 5 page tabs ----
+    // ---- PAGE_FX1 (Pedal Slot 1) ----
     {
-      static const char* kTabLabels[] = {"PEDAL 1", "PEDAL 2", "AMP", "IR / CAB", "EQ"};
-      const float tabW = b.W() / 5.f;
-      for (int i = 0; i < 5; i++)
-      {
-        const int pageIdx = i;
-        const IRECT tabRect = IRECT(b.L + i * tabW, navRect.T, b.L + (i + 1) * tabW, navRect.B);
-        pGraphics->AttachControl(new IVButtonControl(tabRect,
-          [pGraphics, pageIdx](IControl*) {
-            static const char* grps[] = {"PAGE_P1", "PAGE_P2", "PAGE_AMP", "PAGE_IR", "PAGE_EQ"};
-            for (int j = 0; j < 5; j++)
-              pGraphics->ForControlInGroup(grps[j], [j, pageIdx](IControl* c) { c->Hide(j != pageIdx); });
-            pGraphics->SetAllControlsDirty();
-          }, kTabLabels[i], style));
-      }
-    }
-
-    // ---- CONTENT: PAGE_P1 (Pedal Slot 1) ----
-    {
+      pGraphics->AttachControl(new IVPanelControl(fullContentRect, "",
+        DEFAULT_STYLE.WithColor(EVColor::kBG, PluginColors::HOTONE_PANEL).WithDrawFrame(false)),
+        -1, "PAGE_P1");
       pGraphics->AttachControl(
-        new IVLabelControl(contentRect.GetFromTop(36.f), "PEDAL SLOT 1", titleStyle),
+        new IVLabelControl(fullContentRect.GetFromTop(40.f), "FX1 — PEDAL SLOT 1", titleStyle),
         -1, "PAGE_P1");
 
       auto loadPedal1 = [&](const WDL_String& fileName, const WDL_String&) {
@@ -254,17 +288,20 @@ AmpForge::AmpForge(const InstanceInfo& info)
       };
       pGraphics->AttachControl(
         new NAMFileBrowserControl(
-          contentRect.GetMidVPadded(18.f).GetMidHPadded(230.f).GetVShifted(10.f),
+          fullContentRect.GetMidVPadded(18.f).GetMidHPadded(260.f).GetVShifted(10.f),
           kMsgTagClearPedal1, "Load Pedal 1 (.nam)...", "nam",
           loadPedal1, style, fileSVG, crossSVG, leftArrowSVG, rightArrowSVG,
           fileBackgroundBitmap, globeSVG, "Get NAM Models", "https://www.neuralampmodeler.com/"),
         kCtrlTagPedal1FileBrowser, "PAGE_P1");
     }
 
-    // ---- CONTENT: PAGE_P2 (Pedal Slot 2) ----
+    // ---- PAGE_FX2 (Pedal Slot 2) ----
     {
+      pGraphics->AttachControl(new IVPanelControl(fullContentRect, "",
+        DEFAULT_STYLE.WithColor(EVColor::kBG, PluginColors::HOTONE_PANEL).WithDrawFrame(false)),
+        -1, "PAGE_P2");
       pGraphics->AttachControl(
-        new IVLabelControl(contentRect.GetFromTop(36.f), "PEDAL SLOT 2", titleStyle),
+        new IVLabelControl(fullContentRect.GetFromTop(40.f), "FX2 — PEDAL SLOT 2", titleStyle),
         -1, "PAGE_P2");
 
       auto loadPedal2 = [&](const WDL_String& fileName, const WDL_String&) {
@@ -272,75 +309,53 @@ AmpForge::AmpForge(const InstanceInfo& info)
       };
       pGraphics->AttachControl(
         new NAMFileBrowserControl(
-          contentRect.GetMidVPadded(18.f).GetMidHPadded(230.f).GetVShifted(10.f),
+          fullContentRect.GetMidVPadded(18.f).GetMidHPadded(260.f).GetVShifted(10.f),
           kMsgTagClearPedal2, "Load Pedal 2 (.nam)...", "nam",
           loadPedal2, style, fileSVG, crossSVG, leftArrowSVG, rightArrowSVG,
           fileBackgroundBitmap, globeSVG, "Get NAM Models", "https://www.neuralampmodeler.com/"),
         kCtrlTagPedal2FileBrowser, "PAGE_P2");
     }
 
-    // ---- CONTENT: PAGE_AMP (Amp model + ToneStack) ----
+    // ---- PAGE_AMP ----
     {
-      auto loadModel = [&](const WDL_String& fileName, const WDL_String&) {
-        if (fileName.GetLength())
-        {
-          const std::string msg = _StageModel(fileName);
-          if (msg.size())
-          {
-            std::stringstream ss;
-            ss << "Failed to load NAM model:\n\n" << msg;
-            _ShowMessageBox(GetUI(), ss.str().c_str(), "Failed to load model!", kMB_OK);
-          }
-        }
-      };
-
-      // Amp model file browser
-      pGraphics->AttachControl(
-        new NAMFileBrowserControl(
-          contentRect.GetFromTop(40.f).GetMidHPadded(230.f),
-          kMsgTagClearModel, "Select amp model...", "nam",
-          loadModel, style, fileSVG, crossSVG, leftArrowSVG, rightArrowSVG,
-          fileBackgroundBitmap, globeSVG, "Get NAM Models", "https://www.neuralampmodeler.com/"),
-        kCtrlTagModelFileBrowser, "PAGE_AMP");
-
-      // ToneStack knobs row
-      const float knobSz  = 88.f;
-      const float knobTop = contentRect.T + 52.f;
-      struct { int p; const char* lbl; } toneKnobs[] = {
-        {kToneBass,   "BASS"},
-        {kToneMid,    "MID"},
-        {kToneTreble, "TREBLE"},
-      };
-      const float toneRowW = 3.f * knobSz + 2.f * 12.f;
-      float kx = contentRect.MW() - toneRowW * 0.5f;
-      for (auto& k : toneKnobs)
-      {
-        pGraphics->AttachControl(
-          new NAMKnobControl(IRECT(kx, knobTop, kx + knobSz, knobTop + knobSz),
-                             k.p, k.lbl, style, knobBackgroundBitmap),
-          -1, "PAGE_AMP");
-        kx += knobSz + 12.f;
-      }
-
-      // Noise Gate active toggle (left)
-      pGraphics->AttachControl(
-        new NAMSwitchControl(
-          IRECT(contentRect.L + 20.f, contentRect.T + 52.f, contentRect.L + 90.f, contentRect.T + 76.f),
-          kNoiseGateActive, "Noise Gate", style, switchHandleBitmap),
+      pGraphics->AttachControl(new IVPanelControl(ampMainRect, "",
+        DEFAULT_STYLE.WithColor(EVColor::kBG, PluginColors::HOTONE_PANEL).WithDrawFrame(false)),
         -1, "PAGE_AMP");
 
-      // ToneStack active toggle (right)
-      pGraphics->AttachControl(
-        new NAMSwitchControl(
-          IRECT(contentRect.R - 90.f, contentRect.T + 52.f, contentRect.R - 20.f, contentRect.T + 76.f),
-          kEQActive, "Tone EQ", style, switchHandleBitmap),
+      // Arrow buttons — centered vertically, use SVG chevrons
+      const float arrowBtnW = 70.f;
+      const float arrowBtnH = 90.f;
+      const float arrowMidY = ampMainRect.MH();
+
+      pGraphics->AttachControl(new AmpSVGButton(
+        IRECT(ampMainRect.L + 4.f, arrowMidY - arrowBtnH * 0.5f,
+              ampMainRect.L + 4.f + arrowBtnW, arrowMidY + arrowBtnH * 0.5f),
+        [this](IControl*) { _NavigateModel(-1); }, leftArrowSVG),
         -1, "PAGE_AMP");
 
-      // Slim slimmable icon (hidden until model supports it)
-      const IRECT slimIconRect = IRECT(contentRect.R - 70.f, contentRect.B - 40.f,
-                                       contentRect.R - 10.f, contentRect.B - 8.f);
+      pGraphics->AttachControl(new AmpSVGButton(
+        IRECT(ampMainRect.R - 4.f - arrowBtnW, arrowMidY - arrowBtnH * 0.5f,
+              ampMainRect.R - 4.f, arrowMidY + arrowBtnH * 0.5f),
+        [this](IControl*) { _NavigateModel(1); }, rightArrowSVG),
+        -1, "PAGE_AMP");
+
+      // Large model name — Barlow Semi Condensed Black 200pt (use Inter-ExtraBold until font added)
+      const IVStyle bigNameStyle = DEFAULT_STYLE
+        .WithColor(EVColor::kBG, PluginColors::HOTONE_PANEL)
+        .WithDrawFrame(false)
+        .WithValueText(IText(200.f, COLOR_WHITE, "BarlowSemiCondensed-Black"));
+
       pGraphics->AttachControl(
-        new NAMSquareButtonControl(slimIconRect, DefaultClickActionFunc, slimIconSVG),
+        new IVLabelControl(
+          IRECT(ampMainRect.L + 80.f, ampMainRect.T, ampMainRect.R - 80.f, ampMainRect.B),
+          "NO MODEL LOADED", bigNameStyle),
+        kCtrlTagAmpModelName, "PAGE_AMP");
+
+      // Slim icon (hidden until slimmable model loaded)
+      pGraphics->AttachControl(
+        new NAMSquareButtonControl(
+          IRECT(ampMainRect.R - 50.f, ampMainRect.T + 6.f, ampMainRect.R - 8.f, ampMainRect.T + 44.f),
+          DefaultClickActionFunc, slimIconSVG),
         kCtrlTagSlimmableIcon, "PAGE_AMP")
         ->SetAnimationEndActionFunction([pGraphics](IControl*) {
           if (auto* bd = pGraphics->GetControlWithTag(kCtrlTagSlimOverlayBackdrop)) bd->Hide(false);
@@ -348,12 +363,53 @@ AmpForge::AmpForge(const InstanceInfo& info)
           pGraphics->SetAllControlsDirty();
         })
         ->Hide(true);
+
+      // Bottom strip: 3 AmpParamBoxControl (NR Threshold, Output, Input)
+      const float bsGap = 8.f;
+      const float bsW   = (b.W() - 4.f * bsGap) / 3.f;
+      const float bsT   = botStripRect.T + bsGap;
+      const float bsB   = botStripRect.B - bsGap;
+
+      pGraphics->AttachControl(
+        new AmpParamBoxControl(IRECT(bsGap, bsT, bsGap + bsW, bsB),
+                               kNoiseGateThreshold, "NR Threshold"),
+        -1, "PAGE_AMP");
+      pGraphics->AttachControl(
+        new AmpParamBoxControl(IRECT(2.f*bsGap + bsW, bsT, 2.f*bsGap + 2.f*bsW, bsB),
+                               kOutputLevel, "AMP - Master"),
+        -1, "PAGE_AMP");
+
+      // Slot 3: Gate + EQ on/off toggles (two rows, "OFF/OFF" style)
+      {
+        const IRECT slot3(3.f*bsGap + 2.f*bsW, bsT, 3.f*bsGap + 3.f*bsW, bsB);
+        const float pad3 = 6.f;
+        const IVStyle togStyle = style
+          .WithColor(EVColor::kBG, PluginColors::HOTONE_PANEL)
+          .WithColor(EVColor::kON,  PluginColors::HOTONE_AMBER)
+          .WithColor(EVColor::kOFF, PluginColors::HOTONE_BTN)
+          .WithRoundness(0.1f)
+          .WithDrawFrame(true)
+          .WithValueText(IText(13.f, COLOR_WHITE, "Inter-ExtraBold"));
+
+        pGraphics->AttachControl(new IVPanelControl(slot3, "",
+          style.WithColor(EVColor::kBG, PluginColors::HOTONE_PANEL).WithDrawFrame(true)),
+          -1, "PAGE_AMP");
+        pGraphics->AttachControl(new IVSwitchControl(
+          IRECT(slot3.L + pad3, slot3.T + pad3, slot3.R - pad3, slot3.MH() - 2.f),
+          kNoiseGateActive, "GATE", togStyle), -1, "PAGE_AMP");
+        pGraphics->AttachControl(new IVSwitchControl(
+          IRECT(slot3.L + pad3, slot3.MH() + 2.f, slot3.R - pad3, slot3.B - pad3),
+          kEQActive, "TONE EQ", togStyle), -1, "PAGE_AMP");
+      }
     }
 
-    // ---- CONTENT: PAGE_IR (IR / Cab loader) ----
+    // ---- PAGE_IR (IR / Cab loader) ----
     {
+      pGraphics->AttachControl(new IVPanelControl(fullContentRect, "",
+        DEFAULT_STYLE.WithColor(EVColor::kBG, PluginColors::HOTONE_PANEL).WithDrawFrame(false)),
+        -1, "PAGE_IR");
       pGraphics->AttachControl(
-        new IVLabelControl(contentRect.GetFromTop(36.f), "IR / CAB LOADER", titleStyle),
+        new IVLabelControl(fullContentRect.GetFromTop(40.f), "IR / CAB LOADER", titleStyle),
         -1, "PAGE_IR");
 
       auto loadIR = [&](const WDL_String& fileName, const WDL_String&) {
@@ -371,33 +427,35 @@ AmpForge::AmpForge(const InstanceInfo& info)
         }
       };
 
-      const IRECT irBrowserRect = contentRect.GetFromTop(90.f).GetFromBottom(40.f).GetMidHPadded(230.f);
+      const IRECT irBrowserRect = fullContentRect.GetFromTop(110.f).GetFromBottom(40.f).GetMidHPadded(280.f);
       pGraphics->AttachControl(
         new NAMFileBrowserControl(irBrowserRect, kMsgTagClearIR, "Select IR (.wav)...", "wav",
                                   loadIR, style, fileSVG, crossSVG, leftArrowSVG, rightArrowSVG,
                                   fileBackgroundBitmap, globeSVG, "Get IRs", "https://www.neuralampmodeler.com/"),
         kCtrlTagIRFileBrowser, "PAGE_IR");
 
-      // IR bypass toggle
-      const IRECT irSwitchRect = contentRect.GetFromTop(140.f).GetFromBottom(30.f).GetMidHPadded(28.f);
+      const IRECT irSwitchRect = fullContentRect.GetFromTop(160.f).GetFromBottom(30.f).GetMidHPadded(28.f);
       pGraphics->AttachControl(
         new ISVGSwitchControl(irSwitchRect, {irIconOffSVG, irIconOnSVG}, kIRToggle),
         -1, "PAGE_IR");
     }
 
-    // ---- CONTENT: PAGE_EQ (9-band graphic EQ + HPF/LPF) ----
+    // ---- PAGE_EQ (9-band graphic EQ + HPF/LPF) ----
     {
+      pGraphics->AttachControl(new IVPanelControl(fullContentRect, "",
+        DEFAULT_STYLE.WithColor(EVColor::kBG, PluginColors::HOTONE_PANEL).WithDrawFrame(false)),
+        -1, "PAGE_EQ");
       pGraphics->AttachControl(
-        new IVLabelControl(contentRect.GetFromTop(30.f), "PARAMETRIC EQ", titleStyle),
+        new IVLabelControl(fullContentRect.GetFromTop(34.f), "PARAMETRIC EQ", titleStyle),
         -1, "PAGE_EQ");
 
       static const char* kBandLabels[] = {"65", "125", "250", "500", "1k", "2k", "4k", "8k", "16k"};
-      const int   nBands    = 9;
-      const float sliderAreaW = contentRect.W() - 60.f;
-      const float sliderW   = sliderAreaW / (nBands + 2);
-      const float sliderH   = contentRect.H() - 64.f;
-      const float sliderT   = contentRect.T + 32.f;
-      const float sliderL   = contentRect.L + 30.f;
+      const int   nBands      = 9;
+      const float sliderAreaW = fullContentRect.W() - 60.f;
+      const float sliderW     = sliderAreaW / (nBands + 2);
+      const float sliderH     = fullContentRect.H() - 76.f;
+      const float sliderT     = fullContentRect.T + 38.f;
+      const float sliderL     = fullContentRect.L + 30.f;
 
       for (int i = 0; i < nBands; i++)
       {
@@ -409,50 +467,22 @@ AmpForge::AmpForge(const InstanceInfo& info)
       }
 
       const float knobSz = sliderW - 4.f;
-
-      // HPF knob
-      const float hpfX = sliderL + nBands * sliderW + 4.f;
+      const float hpfX   = sliderL + nBands * sliderW + 4.f;
       pGraphics->AttachControl(
         new IVKnobControl(IRECT(hpfX, sliderT + 10.f, hpfX + knobSz, sliderT + 10.f + knobSz),
                           kEQHPFFreq, "HPF", DEFAULT_STYLE),
         -1, "PAGE_EQ");
 
-      // LPF knob
       const float lpfX = hpfX + sliderW;
       pGraphics->AttachControl(
         new IVKnobControl(IRECT(lpfX, sliderT + 10.f, lpfX + knobSz, sliderT + 10.f + knobSz),
                           kEQLPFFreq, "LPF", DEFAULT_STYLE),
         -1, "PAGE_EQ");
 
-      // EQ page bypass toggle
       pGraphics->AttachControl(
-        new NAMSwitchControl(contentRect.GetFromBottom(30.f).GetMidHPadded(55.f),
-                             kEQPageActive, "EQ On", style, switchHandleBitmap),
+        new IVSwitchControl(fullContentRect.GetFromBottom(42.f).GetMidHPadded(64.f),
+                            kEQPageActive, "EQ On", style),
         -1, "PAGE_EQ");
-    }
-
-    // ---- BOTTOM BAR ----
-    {
-      // Tuner open/close button
-      pGraphics->AttachControl(new IVButtonControl(
-        botBarRect.GetFromLeft(80.f).GetMidVPadded(12.f).GetHShifted(8.f),
-        [pGraphics](IControl*) {
-          auto* overlay = pGraphics->GetControlWithTag(kCtrlTagTunerDisplay);
-          if (!overlay) return;
-          const bool nowHide = !overlay->IsHidden();
-          pGraphics->GetControlWithTag(kCtrlTagTunerDisplay)->Hide(nowHide);
-          pGraphics->GetControlWithTag(kCtrlTagTunerNote)->Hide(nowHide);
-          pGraphics->GetControlWithTag(kCtrlTagTunerFreq)->Hide(nowHide);
-          pGraphics->GetControlWithTag(kCtrlTagTunerCents)->Hide(nowHide);
-          pGraphics->SetAllControlsDirty();
-        }, "TUNER", style));
-
-      // Settings gear (bottom-right corner)
-      pGraphics->AttachControl(new NAMCircleButtonControl(
-        CornerButtonArea(b),
-        [pGraphics](IControl*) {
-          pGraphics->GetControlWithTag(kCtrlTagSettingsBox)->As<NAMSettingsPageControl>()->HideAnimated(false);
-        }, gearSVG));
     }
 
     // ---- SETTINGS OVERLAY (hidden) ----
@@ -460,6 +490,13 @@ AmpForge::AmpForge(const InstanceInfo& info)
       new NAMSettingsPageControl(b, backgroundBitmap, inputLevelBackgroundBitmap, switchHandleBitmap,
                                  crossSVG, style, radioButtonStyle),
       kCtrlTagSettingsBox)->Hide(true);
+
+    // Settings gear (corner)
+    pGraphics->AttachControl(new NAMCircleButtonControl(
+      CornerButtonArea(b),
+      [pGraphics](IControl*) {
+        pGraphics->GetControlWithTag(kCtrlTagSettingsBox)->As<NAMSettingsPageControl>()->HideAnimated(false);
+      }, gearSVG));
 
     // ---- SLIM OVERLAY (hidden) ----
     {
@@ -477,9 +514,12 @@ AmpForge::AmpForge(const InstanceInfo& info)
 
     // ---- TUNER OVERLAY (hidden) ----
     {
-      const IRECT tunerRect = b.GetCentredInside(280.f, 190.f);
+      const IRECT tunerRect = b.GetCentredInside(300.f, 200.f);
       pGraphics->AttachControl(
-        new IVPanelControl(tunerRect, "", DEFAULT_STYLE),
+        new IVPanelControl(tunerRect, "",
+          DEFAULT_STYLE
+            .WithColor(EVColor::kBG, PluginColors::HOTONE_PANEL)
+            .WithDrawFrame(true)),
         kCtrlTagTunerDisplay)->Hide(true);
       pGraphics->AttachControl(
         new IVLabelControl(tunerRect.GetFromTop(60.f).GetMidVPadded(20.f), "--", titleStyle),
@@ -490,20 +530,39 @@ AmpForge::AmpForge(const InstanceInfo& info)
       pGraphics->AttachControl(
         new IVLabelControl(tunerRect.GetFromBottom(60.f).GetMidVPadded(14.f), "0 cents", style),
         kCtrlTagTunerCents)->Hide(true);
-      // Live Tuner always-on toggle
       pGraphics->AttachControl(
-        new NAMSwitchControl(tunerRect.GetFromBottom(30.f).GetMidHPadded(55.f),
-                             kTunerLive, "Live", style, switchHandleBitmap))->Hide(true);
+        new IVSwitchControl(tunerRect.GetFromBottom(36.f).GetMidHPadded(60.f),
+                            kTunerLive, "Live", style))->Hide(true);
     }
 
-    // ---- Initial page: AMP visible, all others hidden ----
+    // ---- TONE3000 BROWSER OVERLAY (hidden) ----
+#ifdef _WIN32
+    {
+      auto onModelLoaded = [this](const std::string& filePath) {
+        WDL_String wdlPath(filePath.c_str());
+        const std::string msg = _StageModel(wdlPath);
+        if (!msg.empty())
+        {
+          std::stringstream ss;
+          ss << "Failed to load downloaded model:\n\n" << msg;
+          if (auto* ui = GetUI())
+            _ShowMessageBox(ui, ss.str().c_str(), "Failed to load model!", kMB_OK);
+        }
+      };
+      pGraphics->AttachControl(
+        new Tone3000BrowserControl(b, mToneLib, onModelLoaded, style),
+        kCtrlTagTone3000Browser)->Hide(true);
+    }
+#endif
+
+    // ---- Initial page: AMP ----
     {
       static const char* allGroups[] = {"PAGE_P1", "PAGE_P2", "PAGE_AMP", "PAGE_IR", "PAGE_EQ"};
       for (int i = 0; i < 5; i++)
         pGraphics->ForControlInGroup(allGroups[i], [i](IControl* c) { c->Hide(i != kPageAmp); });
     }
 
-    // ---- Global mouse-over flags ----
+    // ---- Global mouse flags ----
     pGraphics->ForAllControlsFunc([](IControl* pControl) {
       pControl->SetMouseEventsWhenDisabled(true);
       pControl->SetMouseOverWhenDisabled(true);
@@ -679,6 +738,12 @@ void AmpForge::OnIdle()
   mInputSender.TransmitData(*this);
   mOutputSender.TransmitData(*this);
 
+#ifdef _WIN32
+  if (auto* pGraphics = GetUI())
+    if (auto* ctrl = pGraphics->GetControlWithTag(kCtrlTagTone3000Browser))
+      static_cast<Tone3000BrowserControl*>(ctrl)->Poll();
+#endif
+
   if (mNewModelLoadedInDSP)
   {
     if (auto* pGraphics = GetUI())
@@ -705,6 +770,45 @@ void AmpForge::OnIdle()
     }
   }
 }
+
+#ifdef _WIN32
+void AmpForge::_ScanModelFiles()
+{
+  namespace fs = std::filesystem;
+  mModelFiles.clear();
+  char path[MAX_PATH] = {};
+  if (SUCCEEDED(SHGetFolderPathA(nullptr, CSIDL_PERSONAL, nullptr, 0, path)))
+  {
+    std::string dir = std::string(path) + "\\AmpForge";
+    try {
+      for (const auto& entry : fs::directory_iterator(dir))
+        if (entry.path().extension() == ".nam")
+          mModelFiles.push_back(entry.path().string());
+      std::sort(mModelFiles.begin(), mModelFiles.end());
+    }
+    catch (...) {}
+  }
+}
+
+void AmpForge::_NavigateModel(int delta)
+{
+  _ScanModelFiles();
+  if (mModelFiles.empty()) return;
+  if (mCurrentModelIdx < 0) mCurrentModelIdx = 0;
+  else mCurrentModelIdx = std::clamp(mCurrentModelIdx + delta, 0, (int)mModelFiles.size() - 1);
+  WDL_String path(mModelFiles[mCurrentModelIdx].c_str());
+  const std::string err = _StageModel(path);
+  if (!err.empty())
+  {
+    if (auto* ui = GetUI())
+    {
+      std::stringstream ss;
+      ss << "Failed to load model:\n\n" << err;
+      _ShowMessageBox(ui, ss.str().c_str(), "Load error", kMB_OK);
+    }
+  }
+}
+#endif
 
 bool AmpForge::SerializeState(IByteChunk& chunk) const
 {
@@ -750,6 +854,27 @@ void AmpForge::OnUIOpen()
     // If it's yet to be loaded, then the completion handler will set us straight once it runs.
     if (mModel == nullptr && mStagedModel == nullptr)
       SendControlMsgFromDelegate(kCtrlTagModelFileBrowser, kMsgTagLoadFailed);
+    // Update the large center label on the AMP page
+    if (auto* lbl = GetUI()->GetControlWithTag(kCtrlTagAmpModelName))
+    {
+      const std::string stem = std::filesystem::path(mNAMPath.Get()).stem().string();
+      lbl->As<ITextControl>()->SetStr(stem.c_str());
+    }
+  }
+
+  // Refresh IN/OUT dB labels with current param values
+  {
+    auto updateLevelLabel = [&](int tag, int paramIdx, const char* prefix) {
+      if (auto* ctrl = GetUI()->GetControlWithTag(tag))
+      {
+        WDL_String disp;
+        GetParam(paramIdx)->GetDisplay(disp, true);
+        std::string s = prefix; s += disp.Get();
+        static_cast<StatusBoxControl*>(ctrl)->SetStr(s.c_str());
+      }
+    };
+    updateLevelLabel(kCtrlTagInputLevelDisplay,  kInputLevel,  "IN: ");
+    updateLevelLabel(kCtrlTagOutputLevelDisplay, kOutputLevel, "OUT: ");
   }
 
   if (mIRPath.GetLength())
@@ -820,11 +945,24 @@ void AmpForge::OnParamChangeUI(int paramIdx, EParamSource source)
     {
       case kNoiseGateActive: pGraphics->GetControlWithParamIdx(kNoiseGateThreshold)->SetDisabled(!active); break;
       case kEQActive:
-        // Tone knobs live in PAGE_AMP group; disable/enable by param index range
         for (int pi : {(int)kToneBass, (int)kToneMid, (int)kToneTreble})
           if (auto* c = pGraphics->GetControlWithParamIdx(pi)) c->SetDisabled(!active);
         break;
       case kIRToggle: pGraphics->GetControlWithTag(kCtrlTagIRFileBrowser)->SetDisabled(!active); break;
+      case kInputLevel:
+        if (auto* ctrl = pGraphics->GetControlWithTag(kCtrlTagInputLevelDisplay)) {
+          WDL_String disp; GetParam(kInputLevel)->GetDisplay(disp, true);
+          std::string s = "IN: "; s += disp.Get();
+          static_cast<StatusBoxControl*>(ctrl)->SetStr(s.c_str());
+        }
+        break;
+      case kOutputLevel:
+        if (auto* ctrl = pGraphics->GetControlWithTag(kCtrlTagOutputLevelDisplay)) {
+          WDL_String disp; GetParam(kOutputLevel)->GetDisplay(disp, true);
+          std::string s = "OUT: "; s += disp.Get();
+          static_cast<StatusBoxControl*>(ctrl)->SetStr(s.c_str());
+        }
+        break;
       default: break;
     }
   }
@@ -1082,6 +1220,13 @@ std::string AmpForge::_StageModel(const WDL_String& modelPath)
     mStagedModel = std::move(temp);
     mNAMPath = modelPath;
     SendControlMsgFromDelegate(kCtrlTagModelFileBrowser, kMsgTagLoadedModel, mNAMPath.GetLength(), mNAMPath.Get());
+    // Update big center label
+    if (auto* ui = GetUI())
+      if (auto* lbl = ui->GetControlWithTag(kCtrlTagAmpModelName))
+      {
+        const std::string stem = std::filesystem::path(mNAMPath.Get()).stem().string();
+        lbl->As<ITextControl>()->SetStr(stem.c_str());
+      }
   }
   catch (std::runtime_error& e)
   {

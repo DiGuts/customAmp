@@ -73,6 +73,16 @@ const iplug::igraphics::IColor NAM_THEMECOLOR(255, 80, 133, 232); // Azure
 // const iplug::igraphics::IColor NAM_THEMECOLOR(255, 23, 190, 187); // Custom :)
 const iplug::igraphics::IColor NAM_THEMEFONTCOLOR(255, 242, 242, 242); // Dark White
 
+// Hotone Ampero Mini dark/amber theme
+const iplug::igraphics::IColor HOTONE_BG    (255,  8,  8,  8);  // near black
+const iplug::igraphics::IColor HOTONE_PANEL (255, 18, 18, 18);  // dark panel
+const iplug::igraphics::IColor HOTONE_BTN   (255, 28, 28, 28);  // button bg
+const iplug::igraphics::IColor HOTONE_BORDER(255, 55, 55, 55);  // frame/border
+const iplug::igraphics::IColor HOTONE_AMBER (255, 198, 142, 12); // amber accent
+const iplug::igraphics::IColor HOTONE_DIM   (255, 105,  74,  6); // dim amber
+const iplug::igraphics::IColor HOTONE_GREY  (255, 130, 130, 130); // secondary text
+const iplug::igraphics::IColor HOTONE_OLIVE (255,  62,  66,  16); // dark olive-green (nav tabs)
+
 // Misc
 // const iplug::igraphics::IColor MOUSEOVER = NAM_3.WithOpacity(0.3);
 const iplug::igraphics::IColor MOUSEOVER = NAM_THEMEFONTCOLOR.WithOpacity(0.1);
