@@ -21,9 +21,9 @@ public:
 
     void Draw(IGraphics& g) override
     {
-        const IColor bg     = PluginColors::HOTONE_PANEL;
-        const IColor border = PluginColors::HOTONE_BORDER;
-        const IColor amber  = PluginColors::HOTONE_AMBER;
+        const IColor bg     = PluginColors::HOTONE_PANEL;   // #1C1F1C
+        const IColor border = PluginColors::HOTONE_BORDER_DIM; // #706330 89%
+        const IColor amber  = PluginColors::HOTONE_BORDER;  // #7E7037 slider bar
         const IColor white  = IColor(255, 255, 255, 255);
         const IColor dark   = IColor(255, 10, 10, 10);
 

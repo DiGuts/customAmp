@@ -73,15 +73,18 @@ const iplug::igraphics::IColor NAM_THEMECOLOR(255, 80, 133, 232); // Azure
 // const iplug::igraphics::IColor NAM_THEMECOLOR(255, 23, 190, 187); // Custom :)
 const iplug::igraphics::IColor NAM_THEMEFONTCOLOR(255, 242, 242, 242); // Dark White
 
-// Hotone Ampero Mini dark/amber theme
-const iplug::igraphics::IColor HOTONE_BG    (255,  8,  8,  8);  // near black
-const iplug::igraphics::IColor HOTONE_PANEL (255, 18, 18, 18);  // dark panel
-const iplug::igraphics::IColor HOTONE_BTN   (255, 28, 28, 28);  // button bg
-const iplug::igraphics::IColor HOTONE_BORDER(255, 55, 55, 55);  // frame/border
-const iplug::igraphics::IColor HOTONE_AMBER (255, 198, 142, 12); // amber accent
-const iplug::igraphics::IColor HOTONE_DIM   (255, 105,  74,  6); // dim amber
-const iplug::igraphics::IColor HOTONE_GREY  (255, 130, 130, 130); // secondary text
-const iplug::igraphics::IColor HOTONE_OLIVE (255,  62,  66,  16); // dark olive-green (nav tabs)
+// Amphead dark/golden theme
+const iplug::igraphics::IColor HOTONE_BG      (255,  38,  38,  34); // #262622 main bg
+const iplug::igraphics::IColor HOTONE_PANEL   (255,  28,  31,  28); // #1C1F1C slider/IN-OUT bg
+const iplug::igraphics::IColor HOTONE_BTN     (255,  56,  58,  39); // #383A27 top button inner
+const iplug::igraphics::IColor HOTONE_BORDER  (255, 126, 112,  55); // #7E7037 top button outline (w5) / slider bar
+const iplug::igraphics::IColor HOTONE_AMBER   (255, 126, 112,  55); // #7E7037 slider fill
+const iplug::igraphics::IColor HOTONE_DIM     (255,  86,  76,  36); // #564C24 (used for knob pressed)
+const iplug::igraphics::IColor HOTONE_GREY    (255, 130, 130, 130); // secondary text
+const iplug::igraphics::IColor HOTONE_OLIVE   (255,  56,  58,  39); // kept alias = BTN
+const iplug::igraphics::IColor HOTONE_BORDER_DIM(227, 112,  99,  48); // #706330 89% IN/OUT outline
+const iplug::igraphics::IColor HOTONE_PRESSED (207,  86,  76,  36); // #564C24 81% arrow pressed bg
+const iplug::igraphics::IColor HOTONE_ARROW   (255,  29,  27,  32); // #1D1B20 arrow pressed fg
 
 // Misc
 // const iplug::igraphics::IColor MOUSEOVER = NAM_3.WithOpacity(0.3);

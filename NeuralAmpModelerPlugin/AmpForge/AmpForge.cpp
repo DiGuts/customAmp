@@ -182,10 +182,11 @@ AmpForge::AmpForge(const InstanceInfo& info)
 
     const auto b = pGraphics->GetBounds();  // 1280 x 800
 
-    // ---- Zone geometry ----
-    const float kNavH      = 70.f;
-    const float kStatusH   = 50.f;
-    const float kBotStripH = 120.f;
+    // ---- Zone geometry (1280x800, Figma-measured) ----
+    // Nav band = 16px top + 100px buttons + 20px bottom = 136px
+    const float kNavH      = 136.f;  // full nav band incl. 16/20 margins
+    const float kStatusH   = 84.f;   // Status row — Change tone fills full 84px
+    const float kBotStripH = 163.f;  // 145px boxes + 18px bottom margin (Figma)
 
     const IRECT navRect         = b.GetFromTop(kNavH);
     const IRECT statusRect      = b.GetFromTop(kNavH + kStatusH).GetFromBottom(kStatusH);
@@ -193,10 +194,12 @@ AmpForge::AmpForge(const InstanceInfo& info)
     const IRECT botStripRect    = b.GetFromBottom(kBotStripH);
     const IRECT fullContentRect = b.GetReducedFromTop(kNavH + kStatusH);
 
-    // ---- Global background ----
+    // ---- Global background ---- (solid fill — guarantees no OS gray shows through transparent gaps)
+    pGraphics->AttachPanelBackground(PluginColors::HOTONE_BG);
     pGraphics->AttachControl(new IVPanelControl(b, "",
       DEFAULT_STYLE
         .WithColor(EVColor::kBG, PluginColors::HOTONE_BG)
+        .WithColor(EVColor::kFG, COLOR_TRANSPARENT)
         .WithDrawFrame(false)));
 
     // ---- NAV BAR: custom-drawn single control ----
@@ -214,24 +217,25 @@ AmpForge::AmpForge(const InstanceInfo& info)
       pGraphics->AttachControl(new IVPanelControl(statusRect, "",
         DEFAULT_STYLE
           .WithColor(EVColor::kBG, PluginColors::HOTONE_BG)
+          .WithColor(EVColor::kFG, COLOR_TRANSPARENT)
           .WithDrawFrame(false)));
 
-      const float sT = statusRect.T + 6.f;
-      const float sB = statusRect.B - 6.f;
+      // Status row heights — Figma: ChangeTone=84px full height, IN/OUT/BPM=61px centred
+      const float sBoxH = 61.f;
+      const float sT_box = statusRect.T + (kStatusH - sBoxH) * 0.5f;
+      const float sB_box = sT_box + sBoxH;
+      const float sT_full = statusRect.T;
+      const float sB_full = statusRect.B;
 
-      // IN level
+      // IN | OUT — joined single box with center separator (Figma image4)
+      // x=20 left margin, total width 404 (IN 196 + OUT 212 - shared edge → 404)
       pGraphics->AttachControl(
-        new StatusBoxControl(IRECT(8.f, sT, 134.f, sB), "IN: 0 dB"),
+        new InOutBoxControl(IRECT(20.f, sT_box, 424.f, sB_box)),
         kCtrlTagInputLevelDisplay);
 
-      // OUT level
-      pGraphics->AttachControl(
-        new StatusBoxControl(IRECT(142.f, sT, 268.f, sB), "OUT: 0 dB"),
-        kCtrlTagOutputLevelDisplay);
-
-      // Change tone... (file picker)
+      // Change tone — x=432, w=568, full row height 84px (Figma: 568×84)
       pGraphics->AttachControl(new ChangeToneControl(
-        IRECT(276.f, sT, 1090.f, sB),
+        IRECT(432.f, sT_full, 1000.f, sB_full),
         [this, pGraphics](IControl*) {
           WDL_String file, dir;
           pGraphics->PromptForFile(file, dir, EFileAction::Open, "nam",
@@ -251,7 +255,7 @@ AmpForge::AmpForge(const InstanceInfo& info)
 
       // Tone3000 browse button
       pGraphics->AttachControl(new StatusBoxControl(
-        IRECT(1098.f, sT, 1148.f, sB), "...", true,
+        IRECT(1098.f, sT_box, 1148.f, sB_box), "...", true,
         [pGraphics](IControl*) {
 #ifdef _WIN32
           if (auto* br = pGraphics->GetControlWithTag(kCtrlTagTone3000Browser))
@@ -260,9 +264,9 @@ AmpForge::AmpForge(const InstanceInfo& info)
 #endif
         }));
 
-      // BPM
+      // BPM — x=1156, w=116
       pGraphics->AttachControl(
-        new StatusBoxControl(IRECT(1156.f, sT, 1272.f, sB), "BPM: 120"));
+        new StatusBoxControl(IRECT(1156.f, sT_box, 1272.f, sB_box), "BPM: 120"));
 
       // Hidden meter controls — needed for TransmitData
       const IRECT offscreen = IRECT(-4.f, -4.f, -2.f, -2.f);
@@ -277,7 +281,7 @@ AmpForge::AmpForge(const InstanceInfo& info)
     // ---- PAGE_FX1 (Pedal Slot 1) ----
     {
       pGraphics->AttachControl(new IVPanelControl(fullContentRect, "",
-        DEFAULT_STYLE.WithColor(EVColor::kBG, PluginColors::HOTONE_PANEL).WithDrawFrame(false)),
+        DEFAULT_STYLE.WithColor(EVColor::kBG, PluginColors::HOTONE_PANEL).WithColor(EVColor::kFG, COLOR_TRANSPARENT).WithDrawFrame(false)),
         -1, "PAGE_P1");
       pGraphics->AttachControl(
         new IVLabelControl(fullContentRect.GetFromTop(40.f), "FX1 — PEDAL SLOT 1", titleStyle),
@@ -298,7 +302,7 @@ AmpForge::AmpForge(const InstanceInfo& info)
     // ---- PAGE_FX2 (Pedal Slot 2) ----
     {
       pGraphics->AttachControl(new IVPanelControl(fullContentRect, "",
-        DEFAULT_STYLE.WithColor(EVColor::kBG, PluginColors::HOTONE_PANEL).WithDrawFrame(false)),
+        DEFAULT_STYLE.WithColor(EVColor::kBG, PluginColors::HOTONE_PANEL).WithColor(EVColor::kFG, COLOR_TRANSPARENT).WithDrawFrame(false)),
         -1, "PAGE_P2");
       pGraphics->AttachControl(
         new IVLabelControl(fullContentRect.GetFromTop(40.f), "FX2 — PEDAL SLOT 2", titleStyle),
@@ -319,35 +323,40 @@ AmpForge::AmpForge(const InstanceInfo& info)
     // ---- PAGE_AMP ----
     {
       pGraphics->AttachControl(new IVPanelControl(ampMainRect, "",
-        DEFAULT_STYLE.WithColor(EVColor::kBG, PluginColors::HOTONE_PANEL).WithDrawFrame(false)),
+        DEFAULT_STYLE.WithColor(EVColor::kBG, PluginColors::HOTONE_BG).WithColor(EVColor::kFG, COLOR_TRANSPARENT).WithDrawFrame(false)),
         -1, "PAGE_AMP");
 
-      // Arrow buttons — centered vertically, use SVG chevrons
-      const float arrowBtnW = 70.f;
-      const float arrowBtnH = 90.f;
-      const float arrowMidY = ampMainRect.MH();
+      // Arrow buttons — Figma: 120×390, centered vertically in main area
+      const float arrowW = 120.f;
+      const float arrowH = 390.f;
+      const float arrowT = ampMainRect.T + (ampMainRect.H() - arrowH) * 0.5f;
+      const float arrowB = arrowT + arrowH;
 
       pGraphics->AttachControl(new AmpSVGButton(
-        IRECT(ampMainRect.L + 4.f, arrowMidY - arrowBtnH * 0.5f,
-              ampMainRect.L + 4.f + arrowBtnW, arrowMidY + arrowBtnH * 0.5f),
+        IRECT(ampMainRect.L, arrowT, ampMainRect.L + arrowW, arrowB),
         [this](IControl*) { _NavigateModel(-1); }, leftArrowSVG),
         -1, "PAGE_AMP");
 
       pGraphics->AttachControl(new AmpSVGButton(
-        IRECT(ampMainRect.R - 4.f - arrowBtnW, arrowMidY - arrowBtnH * 0.5f,
-              ampMainRect.R - 4.f, arrowMidY + arrowBtnH * 0.5f),
+        IRECT(ampMainRect.R - arrowW, arrowT, ampMainRect.R, arrowB),
         [this](IControl*) { _NavigateModel(1); }, rightArrowSVG),
         -1, "PAGE_AMP");
 
-      // Large model name — Barlow Semi Condensed Black 200pt (use Inter-ExtraBold until font added)
+      // Large model name — Figma: 1057×314, centered between arrows vertically centred
       const IVStyle bigNameStyle = DEFAULT_STYLE
-        .WithColor(EVColor::kBG, PluginColors::HOTONE_PANEL)
+        .WithColor(EVColor::kBG, COLOR_TRANSPARENT)
+        .WithColor(EVColor::kFG, COLOR_TRANSPARENT)
         .WithDrawFrame(false)
         .WithValueText(IText(200.f, COLOR_WHITE, "BarlowSemiCondensed-Black"));
 
+      const float nameH   = 314.f;
+      const float nameVOff = (ampMainRect.H() - nameH) * 0.5f;
       pGraphics->AttachControl(
         new IVLabelControl(
-          IRECT(ampMainRect.L + 80.f, ampMainRect.T, ampMainRect.R - 80.f, ampMainRect.B),
+          IRECT(ampMainRect.L + arrowW,
+                ampMainRect.T + nameVOff,
+                ampMainRect.R - arrowW,
+                ampMainRect.T + nameVOff + nameH),
           "NO MODEL LOADED", bigNameStyle),
         kCtrlTagAmpModelName, "PAGE_AMP");
 
@@ -364,49 +373,52 @@ AmpForge::AmpForge(const InstanceInfo& info)
         })
         ->Hide(true);
 
-      // Bottom strip: 3 AmpParamBoxControl (NR Threshold, Output, Input)
-      const float bsGap = 8.f;
-      const float bsW   = (b.W() - 4.f * bsGap) / 3.f;
-      const float bsT   = botStripRect.T + bsGap;
-      const float bsB   = botStripRect.B - bsGap;
+      // Bottom strip — Figma: 3×400px boxes, 20px side margins, 20px gaps, 18px bottom margin
+      const float bsMX  = 20.f;   // side margin
+      const float bsGap = 20.f;   // gap between boxes
+      const float bsBoxH = 145.f; // box height (18px bottom margin already in botStripRect)
+      const float bsW   = (b.W() - 2.f * bsMX - 2.f * bsGap) / 3.f;  // = 400 @ 1280
+      const float bsT   = botStripRect.T;
+      const float bsB   = botStripRect.T + bsBoxH;
+      const float x0 = bsMX;
+      const float x1 = x0 + bsW + bsGap;
+      const float x2 = x1 + bsW + bsGap;
 
       pGraphics->AttachControl(
-        new AmpParamBoxControl(IRECT(bsGap, bsT, bsGap + bsW, bsB),
+        new AmpParamBoxControl(IRECT(x0, bsT, x0 + bsW, bsB),
                                kNoiseGateThreshold, "NR Threshold"),
         -1, "PAGE_AMP");
       pGraphics->AttachControl(
-        new AmpParamBoxControl(IRECT(2.f*bsGap + bsW, bsT, 2.f*bsGap + 2.f*bsW, bsB),
+        new AmpParamBoxControl(IRECT(x1, bsT, x1 + bsW, bsB),
                                kOutputLevel, "AMP - Master"),
         -1, "PAGE_AMP");
 
-      // Slot 3: Gate + EQ on/off toggles (two rows, "OFF/OFF" style)
+      // Slot 3: Gate + Tone EQ — outer golden panel + 2 labeled toggle buttons
       {
-        const IRECT slot3(3.f*bsGap + 2.f*bsW, bsT, 3.f*bsGap + 3.f*bsW, bsB);
-        const float pad3 = 6.f;
-        const IVStyle togStyle = style
-          .WithColor(EVColor::kBG, PluginColors::HOTONE_PANEL)
-          .WithColor(EVColor::kON,  PluginColors::HOTONE_AMBER)
-          .WithColor(EVColor::kOFF, PluginColors::HOTONE_BTN)
-          .WithRoundness(0.1f)
-          .WithDrawFrame(true)
-          .WithValueText(IText(13.f, COLOR_WHITE, "Inter-ExtraBold"));
+        const IRECT slot3(x2, bsT, x2 + bsW, bsB);
 
-        pGraphics->AttachControl(new IVPanelControl(slot3, "",
-          style.WithColor(EVColor::kBG, PluginColors::HOTONE_PANEL).WithDrawFrame(true)),
-          -1, "PAGE_AMP");
-        pGraphics->AttachControl(new IVSwitchControl(
-          IRECT(slot3.L + pad3, slot3.T + pad3, slot3.R - pad3, slot3.MH() - 2.f),
-          kNoiseGateActive, "GATE", togStyle), -1, "PAGE_AMP");
-        pGraphics->AttachControl(new IVSwitchControl(
-          IRECT(slot3.L + pad3, slot3.MH() + 2.f, slot3.R - pad3, slot3.B - pad3),
-          kEQActive, "TONE EQ", togStyle), -1, "PAGE_AMP");
+        // Outer panel: olive bg + thick golden border (matches nav buttons)
+        pGraphics->AttachControl(new AmpOutlinePanel(slot3), -1, "PAGE_AMP");
+
+        const float padX = 14.f;  // inner side padding
+        const float padY = 10.f;  // inner top/bottom padding
+        const float gap  = 10.f;  // gap between the two rows
+        const float rowH = (slot3.H() - 2.f * padY - gap) * 0.5f;
+        const float rTop = slot3.T + padY;
+
+        pGraphics->AttachControl(new LabeledToggleControl(
+          IRECT(slot3.L + padX, rTop, slot3.R - padX, rTop + rowH),
+          kNoiseGateActive, "GATE"), -1, "PAGE_AMP");
+        pGraphics->AttachControl(new LabeledToggleControl(
+          IRECT(slot3.L + padX, rTop + rowH + gap, slot3.R - padX, rTop + 2.f * rowH + gap),
+          kEQActive, "TONE EQ"), -1, "PAGE_AMP");
       }
     }
 
     // ---- PAGE_IR (IR / Cab loader) ----
     {
       pGraphics->AttachControl(new IVPanelControl(fullContentRect, "",
-        DEFAULT_STYLE.WithColor(EVColor::kBG, PluginColors::HOTONE_PANEL).WithDrawFrame(false)),
+        DEFAULT_STYLE.WithColor(EVColor::kBG, PluginColors::HOTONE_PANEL).WithColor(EVColor::kFG, COLOR_TRANSPARENT).WithDrawFrame(false)),
         -1, "PAGE_IR");
       pGraphics->AttachControl(
         new IVLabelControl(fullContentRect.GetFromTop(40.f), "IR / CAB LOADER", titleStyle),
@@ -443,7 +455,7 @@ AmpForge::AmpForge(const InstanceInfo& info)
     // ---- PAGE_EQ (9-band graphic EQ + HPF/LPF) ----
     {
       pGraphics->AttachControl(new IVPanelControl(fullContentRect, "",
-        DEFAULT_STYLE.WithColor(EVColor::kBG, PluginColors::HOTONE_PANEL).WithDrawFrame(false)),
+        DEFAULT_STYLE.WithColor(EVColor::kBG, PluginColors::HOTONE_PANEL).WithColor(EVColor::kFG, COLOR_TRANSPARENT).WithDrawFrame(false)),
         -1, "PAGE_EQ");
       pGraphics->AttachControl(
         new IVLabelControl(fullContentRect.GetFromTop(34.f), "PARAMETRIC EQ", titleStyle),
@@ -864,17 +876,15 @@ void AmpForge::OnUIOpen()
 
   // Refresh IN/OUT dB labels with current param values
   {
-    auto updateLevelLabel = [&](int tag, int paramIdx, const char* prefix) {
-      if (auto* ctrl = GetUI()->GetControlWithTag(tag))
-      {
-        WDL_String disp;
-        GetParam(paramIdx)->GetDisplay(disp, true);
-        std::string s = prefix; s += disp.Get();
-        static_cast<StatusBoxControl*>(ctrl)->SetStr(s.c_str());
-      }
-    };
-    updateLevelLabel(kCtrlTagInputLevelDisplay,  kInputLevel,  "IN: ");
-    updateLevelLabel(kCtrlTagOutputLevelDisplay, kOutputLevel, "OUT: ");
+    if (auto* ctrl = GetUI()->GetControlWithTag(kCtrlTagInputLevelDisplay))
+    {
+      auto* box = static_cast<InOutBoxControl*>(ctrl);
+      WDL_String din, dout;
+      GetParam(kInputLevel)->GetDisplay(din, true);
+      GetParam(kOutputLevel)->GetDisplay(dout, true);
+      box->SetInStr((std::string("IN: ") + din.Get()).c_str());
+      box->SetOutStr((std::string("OUT: ") + dout.Get()).c_str());
+    }
   }
 
   if (mIRPath.GetLength())
@@ -953,14 +963,14 @@ void AmpForge::OnParamChangeUI(int paramIdx, EParamSource source)
         if (auto* ctrl = pGraphics->GetControlWithTag(kCtrlTagInputLevelDisplay)) {
           WDL_String disp; GetParam(kInputLevel)->GetDisplay(disp, true);
           std::string s = "IN: "; s += disp.Get();
-          static_cast<StatusBoxControl*>(ctrl)->SetStr(s.c_str());
+          static_cast<InOutBoxControl*>(ctrl)->SetInStr(s.c_str());
         }
         break;
       case kOutputLevel:
-        if (auto* ctrl = pGraphics->GetControlWithTag(kCtrlTagOutputLevelDisplay)) {
+        if (auto* ctrl = pGraphics->GetControlWithTag(kCtrlTagInputLevelDisplay)) {
           WDL_String disp; GetParam(kOutputLevel)->GetDisplay(disp, true);
           std::string s = "OUT: "; s += disp.Get();
-          static_cast<StatusBoxControl*>(ctrl)->SetStr(s.c_str());
+          static_cast<InOutBoxControl*>(ctrl)->SetOutStr(s.c_str());
         }
         break;
       default: break;

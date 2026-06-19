@@ -265,6 +265,12 @@ private:
   int  _UnserializeStateWithKnownVersion(const iplug::IByteChunk& chunk, int startPos);
   int  _UnserializeStateWithUnknownVersion(const iplug::IByteChunk& chunk, int startPos);
 
+  // Preset browser (folder of *.preset files, user-editable)
+  void _PresetDir(WDL_String& dir) const;
+  bool _SavePresetToFile(const char* fullPath);
+  bool _LoadPresetFromFile(const char* fullPath);
+  void _ShowPresetMenu(iplug::igraphics::IControl* pCaller);
+
   // UI helpers
   void _UpdateControlsFromModel();
   void _UpdateLatency();
