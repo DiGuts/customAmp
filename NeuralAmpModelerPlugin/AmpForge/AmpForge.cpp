@@ -1,8 +1,10 @@
 ﻿#include <algorithm> // std::clamp, std::min
 #include <cmath> // pow
+#include <cstdio> // fopen, fread, fwrite
 #include <filesystem>
 #include <iostream>
 #include <utility>
+#include <vector>
 
 #include "Colors.h"
 #include "../NeuralAmpModelerCore/NAM/activations.h"
@@ -233,25 +235,10 @@ AmpForge::AmpForge(const InstanceInfo& info)
         new InOutBoxControl(IRECT(20.f, sT_box, 424.f, sB_box)),
         kCtrlTagInputLevelDisplay);
 
-      // Change tone — x=432, w=568, full row height 84px (Figma: 568×84)
+      // Change tone — preset browser (folder of *.preset, user-editable)
       pGraphics->AttachControl(new ChangeToneControl(
         IRECT(432.f, sT_full, 1000.f, sB_full),
-        [this, pGraphics](IControl*) {
-          WDL_String file, dir;
-          pGraphics->PromptForFile(file, dir, EFileAction::Open, "nam",
-            [this, pGraphics](const WDL_String& f, const WDL_String&) {
-              if (f.GetLength())
-              {
-                const std::string msg = _StageModel(f);
-                if (!msg.empty())
-                {
-                  std::stringstream ss;
-                  ss << "Failed to load NAM model:\n\n" << msg;
-                  _ShowMessageBox(pGraphics, ss.str().c_str(), "Failed to load model!", kMB_OK);
-                }
-              }
-            });
-        }));
+        [this](IControl* pCaller) { _ShowPresetMenu(pCaller); }));
 
       // Tone3000 browse button
       pGraphics->AttachControl(new StatusBoxControl(
@@ -853,6 +840,129 @@ int AmpForge::UnserializeState(const IByteChunk& chunk, int startPos)
   {
     return _UnserializeStateWithUnknownVersion(chunk, startPos);
   }
+}
+
+// ---- Preset browser: folder of *.preset files (user-editable) -------------
+
+void AmpForge::_PresetDir(WDL_String& dir) const
+{
+#ifdef _WIN32
+  char docs[MAX_PATH];
+  if (SUCCEEDED(SHGetFolderPathA(NULL, CSIDL_PERSONAL, NULL, 0, docs)))
+    dir.SetFormatted(MAX_PATH + 64, "%s\\Amphead\\Presets", docs);
+  else
+    dir.Set("Presets");
+#else
+  WDL_String home;
+  UserHomePath(home);
+  dir.SetFormatted(2048, "%s/Documents/Amphead/Presets", home.Get());
+#endif
+}
+
+bool AmpForge::_SavePresetToFile(const char* fullPath)
+{
+  IByteChunk chunk;
+  SerializeState(chunk);
+  FILE* fp = fopen(fullPath, "wb");
+  if (!fp)
+    return false;
+  if (chunk.Size() > 0)
+    fwrite(chunk.GetData(), 1, (size_t)chunk.Size(), fp);
+  fclose(fp);
+  return true;
+}
+
+bool AmpForge::_LoadPresetFromFile(const char* fullPath)
+{
+  FILE* fp = fopen(fullPath, "rb");
+  if (!fp)
+    return false;
+  fseek(fp, 0, SEEK_END);
+  long sz = ftell(fp);
+  fseek(fp, 0, SEEK_SET);
+  if (sz <= 0)
+  {
+    fclose(fp);
+    return false;
+  }
+  IByteChunk chunk;
+  chunk.Resize((int)sz);
+  size_t got = fread(chunk.GetData(), 1, (size_t)sz, fp);
+  fclose(fp);
+  if ((long)got != sz)
+    return false;
+
+  UnserializeState(chunk, 0);
+  if (GetUI())
+  {
+    SendCurrentParamValuesFromDelegate(); // sync knobs/toggles
+    OnUIOpen();                           // refresh model/IR/level labels
+  }
+  return true;
+}
+
+void AmpForge::_ShowPresetMenu(IControl* pCaller)
+{
+  IGraphics* g = GetUI();
+  if (!g)
+    return;
+
+  WDL_String dir;
+  _PresetDir(dir);
+  std::error_code ec;
+  std::filesystem::create_directories(dir.Get(), ec);
+
+  static IPopupMenu menu;
+  menu.Clear();
+
+  std::vector<std::string> paths;
+  for (const auto& entry : std::filesystem::directory_iterator(dir.Get(), ec))
+  {
+    if (entry.is_regular_file() && entry.path().extension() == ".preset")
+    {
+      menu.AddItem(entry.path().stem().string().c_str());
+      paths.push_back(entry.path().string());
+    }
+  }
+  const int nPresets = (int)paths.size();
+  if (nPresets == 0)
+    menu.AddItem("(no presets yet)", -1, IPopupMenu::Item::kDisabled);
+
+  menu.AddSeparator();
+  menu.AddItem("Save current as new preset...");
+  menu.AddItem("Open presets folder");
+
+  WDL_String dirCopy(dir);
+  menu.SetFunction([this, g, paths, dirCopy, nPresets](IPopupMenu* m) {
+    const int idx = m->GetChosenItemIdx();
+    if (idx < 0)
+      return;
+    if (nPresets > 0 && idx < nPresets)
+    {
+      _LoadPresetFromFile(paths[(size_t)idx].c_str());
+      return;
+    }
+    const char* txt = m->GetItemText(idx);
+    if (!txt)
+      return;
+    if (strstr(txt, "Save current"))
+    {
+      WDL_String fn, d(dirCopy);
+      g->PromptForFile(fn, d, EFileAction::Save, "preset",
+                       [this](const WDL_String& f, const WDL_String&) {
+                         if (f.GetLength())
+                           _SavePresetToFile(f.Get());
+                       });
+    }
+    else if (strstr(txt, "Open presets"))
+    {
+#ifdef _WIN32
+      ShellExecuteA(NULL, "open", dirCopy.Get(), NULL, NULL, SW_SHOWNORMAL);
+#endif
+    }
+  });
+
+  g->CreatePopupMenu(*pCaller, menu, pCaller->GetRECT());
 }
 
 void AmpForge::OnUIOpen()
